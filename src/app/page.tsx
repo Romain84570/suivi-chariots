@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,6 +27,22 @@ export default function Home() {
     commentaire: '',
   });
 
+  const [isClient, setIsClient] = useState(false);
+
+  // Chargement localStorage côté client
+  useEffect(() => {
+    setIsClient(true);
+    const data = localStorage.getItem('interventions');
+    if (data) setInterventions(JSON.parse(data));
+  }, []);
+
+  // Sauvegarde à chaque changement
+  useEffect(() => {
+    if (isClient) {
+      localStorage.setItem('interventions', JSON.stringify(interventions));
+    }
+  }, [interventions, isClient]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -37,9 +53,28 @@ export default function Home() {
     setForm({ date: '', marque: '', modele: '', panne: '', resolution: '', commentaire: '' });
   };
 
+  const exportCSV = () => {
+    const header = ['date','marque','modele','panne','resolution','commentaire'];
+    const rows = interventions.map(i => [
+      i.date, i.marque, i.modele, i.panne, i.resolution, i.commentaire
+    ]);
+    const csvContent = [header, ...rows]
+      .map(row => row.map(field => `"${(field||'').replace(/"/g,'""')}"`).join(';'))
+      .join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'interventions.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const interventionsFiltrees = interventions.filter((i) =>
     `${i.marque} ${i.modele} ${i.panne}`.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (!isClient) return null;
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
@@ -53,7 +88,10 @@ export default function Home() {
           <Input name="panne" value={form.panne} onChange={handleChange} placeholder="Type de panne" />
           <Input name="resolution" value={form.resolution} onChange={handleChange} placeholder="Résolution" />
           <Textarea name="commentaire" value={form.commentaire} onChange={handleChange} placeholder="Commentaire" />
-          <Button onClick={ajouterIntervention}>Ajouter</Button>
+          <div className="col-span-full flex gap-2">
+            <Button onClick={ajouterIntervention}>Ajouter</Button>
+            <Button variant="outline" onClick={exportCSV}>Exporter CSV</Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -91,6 +129,6 @@ export default function Home() {
           </tbody>
         </table>
       </div>
-     </main> 
+    </main>
   );
 }
