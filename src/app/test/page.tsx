@@ -26,6 +26,16 @@ export default function Home() {
     resolution: '',
     commentaire: '',
   });
+  const [isClient, setIsClient] = useState(false);
+
+  // ✅ Marquer une fois que le rendu est côté client
+  useEffect(() => {
+    setIsClient(true);
+    const data = localStorage.getItem('interventions');
+    if (data) {
+      setInterventions(JSON.parse(data));
+    }
+  }, []);
 
   // Charger les données depuis localStorage au démarrage
   useEffect(() => {
@@ -91,7 +101,7 @@ export default function Home() {
             </tr>
           </thead>
           <tbody>
-            {interventionsFiltrees.map((item, idx) => (
+            {isClient && interventionsFiltrees.map((item, idx) => (
               <tr key={idx} className="border-t">
                 <td className="p-2 border">{item.date}</td>
                 <td className="p-2 border">{item.marque}</td>
