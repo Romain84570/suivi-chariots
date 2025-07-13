@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,9 +26,10 @@ export default function Home() {
     resolution: '',
     commentaire: '',
   });
+
   const [isClient, setIsClient] = useState(false);
 
-  // ✅ Marquer une fois que le rendu est côté client
+  // ✅ Chargement depuis le localStorage quand on est côté client
   useEffect(() => {
     setIsClient(true);
     const data = localStorage.getItem('interventions');
@@ -37,32 +38,40 @@ export default function Home() {
     }
   }, []);
 
-  // Charger les données depuis localStorage au démarrage
+  // ✅ Sauvegarde automatique à chaque modification
   useEffect(() => {
-    const data = localStorage.getItem('interventions');
-    if (data) {
-      setInterventions(JSON.parse(data));
+    if (isClient) {
+      localStorage.setItem('interventions', JSON.stringify(interventions));
     }
-  }, []);
-
-  // Sauvegarder dans localStorage dès que ça change
-  useEffect(() => {
-    localStorage.setItem('interventions', JSON.stringify(interventions));
-  }, [interventions]);
+  }, [interventions, isClient]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const ajouterIntervention = () => {
-    if (!form.marque || !form.modele || !form.panne) return;
-    setInterventions([...interventions, { ...form }]);
-    setForm({ date: '', marque: '', modele: '', panne: '', resolution: '', commentaire: '' });
-  };
+  console.log('▶️  Clique sur Ajouter');
+  console.log('  Form courant :', form);
+
+  // Vérification des trois champs obligatoires
+  if (!form.marque || !form.modele || !form.panne) {
+    console.warn('❌ Marque, modèle ou panne manquants – ligne non ajoutée');
+    return;
+  }
+
+  const nouvelleListe = [...interventions, { ...form }];
+  console.log('✅ Nouvelle liste :', nouvelleListe);
+
+  setInterventions(nouvelleListe);
+  setForm({ date: '', marque: '', modele: '', panne: '', resolution: '', commentaire: '' });
+};
+
 
   const interventionsFiltrees = interventions.filter((i) =>
     `${i.marque} ${i.modele} ${i.panne}`.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (!isClient) return null; // ⛔ empêche le rendu tant que localStorage n’est pas prêt
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
@@ -101,7 +110,7 @@ export default function Home() {
             </tr>
           </thead>
           <tbody>
-            {isClient && interventionsFiltrees.map((item, idx) => (
+            {interventionsFiltrees.map((item, idx) => (
               <tr key={idx} className="border-t">
                 <td className="p-2 border">{item.date}</td>
                 <td className="p-2 border">{item.marque}</td>

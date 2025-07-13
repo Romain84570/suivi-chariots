@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { v4 as uuid } from 'uuid';
+import { redirect } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
 
 type Intervention = {
+  id: string;
   date: string;
   marque: string;
   modele: string;
@@ -16,10 +20,19 @@ type Intervention = {
   commentaire: string;
 };
 
-export default function Home() {
+export default async function Home() {
+  // Vérifie la session
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect('/login');
+
+  return <ClientComponent />;
+}
+
+/* Composant client séparé */
+function ClientComponent() {
   const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState<Intervention>({
+  const [form, setForm] = useState<Omit<Intervention, 'id'>>({
     date: '',
     marque: '',
     modele: '',
@@ -27,122 +40,94 @@ export default function Home() {
     resolution: '',
     commentaire: '',
   });
-  const [isClient, setIsClient] = useState(false);
 
-  // Chargement localStorage côté client
   useEffect(() => {
-    setIsClient(true);
-    const data = localStorage.getItem('interventions');
-    if (data) setInterventions(JSON.parse(data));
+    // Lecture initiale
+    (async () => {
+      const { data } = await supabase.from('interventions').select('*').order('date', { ascending: false });
+      if (data) setInterventions(data as Intervention[]);
+    })();
+
+    // Realtime
+    const ch = supabase.channel('interventions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, payload => {
+        if (payload.eventType === 'INSERT') setInterventions(prev => [payload.new as Intervention, ...prev]);
+        if (payload.eventType === 'DELETE') setInterventions(prev => prev.filter(i => i.id !== payload.old.id));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
   }, []);
 
-  // Sauvegarde
-  useEffect(() => {
-    if (isClient) localStorage.setItem('interventions', JSON.stringify(interventions));
-  }, [interventions, isClient]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const ajouterIntervention = () => {
+  const add = async () => {
     if (!form.marque || !form.modele || !form.panne) return;
-    setInterventions([...interventions, { ...form }]);
-    setForm({ date: '', marque: '', modele: '', panne: '', resolution: '', commentaire: '' });
+    await supabase.from('interventions').insert({ id: uuid(), ...form });
+    setForm({ date:'', marque:'', modele:'', panne:'', resolution:'', commentaire:'' });
   };
 
-  const supprimerIntervention = (idx: number) => {
-    const next = [...interventions];
-    next.splice(idx, 1);
-    setInterventions(next);
-  };
-
-  const viderTout = () => {
-    setInterventions([]);
-    localStorage.removeItem('interventions');
+  const del = async (id: string) => {
+    await supabase.from('interventions').delete().eq('id', id);
   };
 
   const exportCSV = () => {
     const header = ['date','marque','modele','panne','resolution','commentaire'];
     const rows = interventions.map(i=>[i.date,i.marque,i.modele,i.panne,i.resolution,i.commentaire]);
-    const csv = [header,...rows]
-      .map(r=>r.map(f=>`"${(f||'').replace(/"/g,'""')}"`).join(';'))
-      .join('\n');
-    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-    const url = URL.createObjectURL(blob);
+    const csv = [header,...rows].map(r=>r.join(';')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const link = document.createElement('a');
-    link.href = url;
+    link.href = URL.createObjectURL(blob);
     link.download = 'interventions.csv';
     link.click();
-    URL.revokeObjectURL(url);
   };
 
-  const interventionsFiltrees = interventions.filter(i =>
-    `${i.marque} ${i.modele} ${i.panne}`.toLowerCase().includes(search.toLowerCase())
+  const liste = interventions.filter(i =>
+    \`\${i.marque} \${i.modele} \${i.panne}\`.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (!isClient) return null;
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Suivi des interventions</h1>
-
       <div className="flex gap-2 mb-4">
         <Button variant="outline" onClick={exportCSV}>Exporter CSV</Button>
-        <Button variant="destructive" onClick={viderTout}>Vider tout</Button>
       </div>
 
       <Card className="mb-6">
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-          <Input type="date" name="date" value={form.date} onChange={handleChange} />
-          <Input name="marque" value={form.marque} onChange={handleChange} placeholder="Marque" />
-          <Input name="modele" value={form.modele} onChange={handleChange} placeholder="Modèle" />
-          <Input name="panne" value={form.panne} onChange={handleChange} placeholder="Type de panne" />
-          <Input name="resolution" value={form.resolution} onChange={handleChange} placeholder="Résolution" />
-          <Textarea name="commentaire" value={form.commentaire} onChange={handleChange} placeholder="Commentaire" />
-          <Button onClick={ajouterIntervention}>Ajouter</Button>
+          <Input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+          <Input placeholder="Marque" value={form.marque} onChange={e=>setForm({...form,marque:e.target.value})}/>
+          <Input placeholder="Modèle" value={form.modele} onChange={e=>setForm({...form,modele:e.target.value})}/>
+          <Input placeholder="Type de panne" value={form.panne} onChange={e=>setForm({...form,panne:e.target.value})}/>
+          <Input placeholder="Résolution" value={form.resolution} onChange={e=>setForm({...form,resolution:e.target.value})}/>
+          <Textarea placeholder="Commentaire" value={form.commentaire} onChange={e=>setForm({...form,commentaire:e.target.value})}/>
+          <Button onClick={add}>Ajouter</Button>
         </CardContent>
       </Card>
 
-      <Input
-        className="mb-4"
-        placeholder="🔍 Rechercher par marque, modèle ou panne..."
-        value={search}
-        onChange={e=>setSearch(e.target.value)}
-      />
+      <Input className="mb-4" placeholder="🔍 Rechercher…" value={search} onChange={e=>setSearch(e.target.value)}/>
 
-      <div className="overflow-auto">
-        <table className="min-w-full border text-sm">
-          <thead className="bg-gray-100 font-semibold">
-            <tr>
-              <th className="p-2 border">Date</th>
-              <th className="p-2 border">Marque</th>
-              <th className="p-2 border">Modèle</th>
-              <th className="p-2 border">Panne</th>
-              <th className="p-2 border">Résolution</th>
-              <th className="p-2 border">Commentaire</th>
-              <th className="p-2 border w-12"></th>
+      <table className="min-w-full border text-sm">
+        <thead className="bg-gray-100 font-semibold">
+          <tr>
+            {['Date','Marque','Modèle','Panne','Résolution','Commentaire',''].map(h=><th key={h} className="p-2 border">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {liste.map(i=>(
+            <tr key={i.id} className="border-t">
+              <td className="p-2 border">{i.date}</td>
+              <td className="p-2 border">{i.marque}</td>
+              <td className="p-2 border">{i.modele}</td>
+              <td className="p-2 border">{i.panne}</td>
+              <td className="p-2 border">{i.resolution}</td>
+              <td className="p-2 border">{i.commentaire}</td>
+              <td className="p-2 border text-center">
+                <Button size="icon" variant="ghost" onClick={()=>del(i.id)}>
+                  <Trash2 className="w-4 h-4"/>
+                </Button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {interventionsFiltrees.map((item, idx)=>(
-              <tr key={idx} className="border-t">
-                <td className="p-2 border">{item.date}</td>
-                <td className="p-2 border">{item.marque}</td>
-                <td className="p-2 border">{item.modele}</td>
-                <td className="p-2 border">{item.panne}</td>
-                <td className="p-2 border">{item.resolution}</td>
-                <td className="p-2 border">{item.commentaire}</td>
-                <td className="p-2 border text-center">
-                  <Button size="icon" variant="ghost" onClick={()=>supprimerIntervention(idx)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </main>
   );
 }
