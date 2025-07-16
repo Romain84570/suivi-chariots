@@ -1,94 +1,124 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';        // <— bien depuis '@/lib'
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
 
-// Type définition étendue
-interface Intervention {
+type Intervention = {
   id: string;
   date: string;
+  serial: string;
   marque: string;
   modele: string;
-  numeroSerie: string;
-  horaMetre: string;
   panne: string;
   resolution: string;
+  horometre: string;
   commentaire: string;
-}
+};
 
 export default function Home() {
   const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<Omit<Intervention, 'id'>>({
     date: '',
+    serial: '',
     marque: '',
     modele: '',
-    numeroSerie: '',
-    horaMetre: '',
     panne: '',
     resolution: '',
+    horometre: '',
     commentaire: '',
   });
 
-  // Chargement initial
+  // → 1) on charge la liste au démarrage
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
         .from('interventions')
         .select('*')
         .order('date', { ascending: false });
-      if (error) console.error(error);
-      else if (data) setInterventions(data);
+      if (error) {
+        console.error(error);
+      } else {
+        setInterventions(data);
+      }
     })();
   }, []);
 
-  // Handler champ
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // → 2) changement d’un champ de formulaire
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Ajouter
-  const ajouter = async () => {
-    if (!form.marque || !form.modele || !form.panne) return;
-    const nouvelle: Intervention = { id: uuidv4(), ...form };
-    const { error } = await supabase.from('interventions').insert(nouvelle);
+  // → 3) ajouter une intervention
+  const handleAdd = async () => {
+    // champs obligatoires
+    if (!form.date || !form.marque || !form.modele || !form.panne) {
+      return alert('Date, marque, modèle et panne sont obligatoires');
+    }
+    const newItem: Intervention = { id: uuidv4(), ...form };
+
+    // insertion dans Supabase
+    const { data, error } = await supabase
+      .from('interventions')
+      .insert(newItem)
+      .select()
+      .single();
+
     if (error) {
       console.error(error);
-      return;
+      return alert('Erreur à l’insertion');
     }
-    setInterventions([nouvelle, ...interventions]);
-    setForm({ date: '', marque: '', modele: '', numeroSerie: '', horaMetre: '', panne: '', resolution: '', commentaire: '' });
+
+    // on met à jour l’état en tête de liste
+    setInterventions([data, ...interventions]);
+    // on réinitialise le formulaire
+    setForm({
+      date: '',
+      serial: '',
+      marque: '',
+      modele: '',
+      panne: '',
+      resolution: '',
+      horometre: '',
+      commentaire: '',
+    });
   };
 
-  // Supprimer
-  const supprimer = async (id: string) => {
-    const { error } = await supabase.from('interventions').delete().eq('id', id);
-    if (error) console.error(error);
-    else setInterventions(interventions.filter(i => i.id !== id));
+  // → 4) suppression
+  const handleDelete = async (id: string) => {
+    await supabase.from('interventions').delete().eq('id', id);
+    setInterventions(interventions.filter((i) => i.id !== id));
   };
 
-  // Export CSV
-  const exportCSV = () => {
-    const header = ['Date','Marque','Modèle','N° Série','Horamètre','Panne','Résolution','Commentaire'];
-    const rows = interventions.map(i => [i.date,i.marque,i.modele,i.numeroSerie,i.horaMetre,i.panne,i.resolution,i.commentaire]);
-    const csvContent = [header, ...rows].map(r => r.join(';')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+  // → 5) export CSV
+  const handleExport = () => {
+    const header = ['Date','N° Série','Marque','Modèle','Panne','Résolution','Horomètre','Commentaire'];
+    const rows = interventions.map((i) => [
+      i.date, i.serial, i.marque, i.modele, i.panne, i.resolution, i.horometre, i.commentaire
+    ]);
+    const csv = [header, ...rows].map((r) => r.join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = 'interventions.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const filtered = interventions.filter(i =>
-    `${i.marque} ${i.modele} ${i.panne}`.toLowerCase().includes(search.toLowerCase())
+  // → 6) filtrage
+  const filtered = interventions.filter((i) =>
+    `${i.serial} ${i.marque} ${i.modele} ${i.panne}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
   );
 
   return (
@@ -96,56 +126,102 @@ export default function Home() {
       <h1 className="text-3xl font-bold mb-6">Suivi des interventions</h1>
 
       <Card className="mb-6">
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-          <Input type="date" name="date" value={form.date} onChange={handleChange} />
-          <Input name="marque" value={form.marque} onChange={handleChange} placeholder="Marque" />
-          <Input name="modele" value={form.modele} onChange={handleChange} placeholder="Modèle" />
-          <Input name="numeroSerie" value={form.numeroSerie} onChange={handleChange} placeholder="N° Série" />
-          <Input name="horaMetre" value={form.horaMetre} onChange={handleChange} placeholder="Horamètre" />
-          <Input name="panne" value={form.panne} onChange={handleChange} placeholder="Type de panne" />
-          <Input name="resolution" value={form.resolution} onChange={handleChange} placeholder="Résolution" />
-          <Textarea name="commentaire" value={form.commentaire} onChange={handleChange} placeholder="Commentaire" />
-          <Button onClick={ajouter}>Ajouter</Button>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+          <Input
+            type="date"
+            name="date"
+            value={form.date}
+            onChange={handleChange}
+            placeholder="Date"
+          />
+          <Input
+            name="serial"
+            value={form.serial}
+            onChange={handleChange}
+            placeholder="N° de série"
+          />
+          <Input
+            name="marque"
+            value={form.marque}
+            onChange={handleChange}
+            placeholder="Marque"
+          />
+          <Input
+            name="modele"
+            value={form.modele}
+            onChange={handleChange}
+            placeholder="Modèle"
+          />
+          <Input
+            name="panne"
+            value={form.panne}
+            onChange={handleChange}
+            placeholder="Panne"
+          />
+          <Input
+            name="resolution"
+            value={form.resolution}
+            onChange={handleChange}
+            placeholder="Résolution"
+          />
+          <Input
+            name="horometre"
+            value={form.horometre}
+            onChange={handleChange}
+            placeholder="Horomètre"
+          />
+          <Textarea
+            name="commentaire"
+            value={form.commentaire}
+            onChange={handleChange}
+            placeholder="Commentaire"
+          />
+          <Button type="button" onClick={handleAdd} className="col-span-full">
+            Ajouter
+          </Button>
         </CardContent>
       </Card>
 
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex items-center mb-4 space-x-2">
         <Input
-          placeholder="🔍 Rechercher..."
+          placeholder="🔍 Rechercher…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1"
         />
-        <Button variant="secondary" onClick={exportCSV}>Exporter CSV</Button>
+        <Button onClick={handleExport} variant="outline">
+          Export CSV
+        </Button>
       </div>
 
       <div className="overflow-auto">
         <table className="min-w-full border text-sm">
           <thead className="bg-gray-100 font-semibold">
             <tr>
-              <th className="p-2 border">Date</th>
-              <th className="p-2 border">Marque</th>
-              <th className="p-2 border">Modèle</th>
-              <th className="p-2 border">N° Série</th>
-              <th className="p-2 border">Horamètre</th>
-              <th className="p-2 border">Panne</th>
-              <th className="p-2 border">Résolution</th>
-              <th className="p-2 border">Commentaire</th>
-              <th className="p-2 border">Actions</th>
+              {['Date','N° Série','Marque','Modèle','Panne','Résolution','Horomètre','Commentaire','Actions']
+                .map((h) => (
+                  <th key={h} className="p-2 border">{h}</th>
+                ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map(item => (
+            {filtered.map((item) => (
               <tr key={item.id} className="border-t">
                 <td className="p-2 border">{item.date}</td>
+                <td className="p-2 border">{item.serial}</td>
                 <td className="p-2 border">{item.marque}</td>
                 <td className="p-2 border">{item.modele}</td>
-                <td className="p-2 border">{item.numeroSerie}</td>
-                <td className="p-2 border">{item.horaMetre}</td>
                 <td className="p-2 border">{item.panne}</td>
                 <td className="p-2 border">{item.resolution}</td>
+                <td className="p-2 border">{item.horometre}</td>
                 <td className="p-2 border">{item.commentaire}</td>
                 <td className="p-2 border text-center">
-                  <Button variant="ghost" size="icon" onClick={() => supprimer(item.id)}>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleDelete(item.id)}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </td>
@@ -155,6 +231,5 @@ export default function Home() {
         </table>
       </div>
     </main>
-  );
+);
 }
-
