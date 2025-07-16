@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 
 type Intervention = {
+  id: string;
   date: string;
   marque: string;
   modele: string;
@@ -16,9 +17,15 @@ type Intervention = {
 };
 
 export default function Home() {
-  const [interventions, setInterventions] = useState<Intervention[]>([]);
+  // 1) initialiser depuis localStorage
+  const [interventions, setInterventions] = useState<Intervention[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem('interventions');
+    return raw ? JSON.parse(raw) : [];
+  });
+
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState<Intervention>({
+  const [form, setForm] = useState<Omit<Intervention, 'id'>>({
     date: '',
     marque: '',
     modele: '',
@@ -27,51 +34,49 @@ export default function Home() {
     commentaire: '',
   });
 
-  const [isClient, setIsClient] = useState(false);
-
-  // ✅ Chargement depuis le localStorage quand on est côté client
+  // 2) à chaque changement de liste, on sauve
   useEffect(() => {
-    setIsClient(true);
-    const data = localStorage.getItem('interventions');
-    if (data) {
-      setInterventions(JSON.parse(data));
-    }
-  }, []);
+    localStorage.setItem('interventions', JSON.stringify(interventions));
+  }, [interventions]);
 
-  // ✅ Sauvegarde automatique à chaque modification
-  useEffect(() => {
-    if (isClient) {
-      localStorage.setItem('interventions', JSON.stringify(interventions));
-    }
-  }, [interventions, isClient]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // 3) handler générique pour tous les champs
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const ajouterIntervention = () => {
-  console.log('▶️  Clique sur Ajouter');
-  console.log('  Form courant :', form);
+  // 4) ajouter une intervention
+  const ajouter = () => {
+    if (!form.marque || !form.modele || !form.panne) {
+      return; // champs obligatoires
+    }
+    const nouvelle: Intervention = {
+      id: Date.now().toString(),
+      ...form,
+    };
+    setInterventions((prev) => [nouvelle, ...prev]);
+    setForm({
+      date: '',
+      marque: '',
+      modele: '',
+      panne: '',
+      resolution: '',
+      commentaire: '',
+    });
+  };
 
-  // Vérification des trois champs obligatoires
-  if (!form.marque || !form.modele || !form.panne) {
-    console.warn('❌ Marque, modèle ou panne manquants – ligne non ajoutée');
-    return;
-  }
+  // 5) suppression
+  const supprimer = (id: string) => {
+    setInterventions((prev) => prev.filter((i) => i.id !== id));
+  };
 
-  const nouvelleListe = [...interventions, { ...form }];
-  console.log('✅ Nouvelle liste :', nouvelleListe);
-
-  setInterventions(nouvelleListe);
-  setForm({ date: '', marque: '', modele: '', panne: '', resolution: '', commentaire: '' });
-};
-
-
-  const interventionsFiltrees = interventions.filter((i) =>
-    `${i.marque} ${i.modele} ${i.panne}`.toLowerCase().includes(search.toLowerCase())
+  // 6) filtre “live”
+  const filtrées = interventions.filter((i) =>
+    `${i.marque} ${i.modele} ${i.panne}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
   );
-
-  if (!isClient) return null; // ⛔ empêche le rendu tant que localStorage n’est pas prêt
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
@@ -79,13 +84,43 @@ export default function Home() {
 
       <Card className="mb-6">
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-          <Input type="date" name="date" value={form.date} onChange={handleChange} />
-          <Input name="marque" value={form.marque} onChange={handleChange} placeholder="Marque" />
-          <Input name="modele" value={form.modele} onChange={handleChange} placeholder="Modèle" />
-          <Input name="panne" value={form.panne} onChange={handleChange} placeholder="Type de panne" />
-          <Input name="resolution" value={form.resolution} onChange={handleChange} placeholder="Résolution" />
-          <Textarea name="commentaire" value={form.commentaire} onChange={handleChange} placeholder="Commentaire" />
-          <Button onClick={ajouterIntervention}>Ajouter</Button>
+          <Input
+            type="date"
+            name="date"
+            value={form.date}
+            onChange={handleChange}
+          />
+          <Input
+            name="marque"
+            placeholder="Marque"
+            value={form.marque}
+            onChange={handleChange}
+          />
+          <Input
+            name="modele"
+            placeholder="Modèle"
+            value={form.modele}
+            onChange={handleChange}
+          />
+          <Input
+            name="panne"
+            placeholder="Type de panne"
+            value={form.panne}
+            onChange={handleChange}
+          />
+          <Input
+            name="resolution"
+            placeholder="Résolution"
+            value={form.resolution}
+            onChange={handleChange}
+          />
+          <Textarea
+            name="commentaire"
+            placeholder="Commentaire"
+            value={form.commentaire}
+            onChange={handleChange}
+          />
+          <Button onClick={ajouter}>Ajouter</Button>
         </CardContent>
       </Card>
 
@@ -101,23 +136,33 @@ export default function Home() {
         <table className="min-w-full border text-sm">
           <thead className="bg-gray-100 font-semibold">
             <tr>
-              <th className="p-2 border">Date</th>
-              <th className="p-2 border">Marque</th>
-              <th className="p-2 border">Modèle</th>
-              <th className="p-2 border">Panne</th>
-              <th className="p-2 border">Résolution</th>
-              <th className="p-2 border">Commentaire</th>
+              {['Date', 'Marque', 'Modèle', 'Panne', 'Résolution', 'Commentaire', ''].map(
+                (h) => (
+                  <th key={h} className="p-2 border">
+                    {h}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody>
-            {interventionsFiltrees.map((item, idx) => (
-              <tr key={idx} className="border-t">
+            {filtrées.map((item) => (
+              <tr key={item.id} className="border-t">
                 <td className="p-2 border">{item.date}</td>
                 <td className="p-2 border">{item.marque}</td>
                 <td className="p-2 border">{item.modele}</td>
                 <td className="p-2 border">{item.panne}</td>
                 <td className="p-2 border">{item.resolution}</td>
                 <td className="p-2 border">{item.commentaire}</td>
+                <td className="p-2 border text-center">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => supprimer(item.id)}
+                  >
+                    🗑️
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
