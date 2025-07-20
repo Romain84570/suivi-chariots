@@ -119,7 +119,7 @@ export default function Home() {
       <div className="flex items-center gap-4 mb-6">
         <Image src="/logo.jpg" alt="Logo" width={150} height={150
         } />
-        <h1 className="text-3xl font-bold">Base de données pannes</h1>
+        <h1 className="text-5xl font-bold text-white/100">Base de données pannes</h1>
       </div>
       <Card className="mb-6">
         <CardContent className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
