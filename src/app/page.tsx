@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import Image from "next/image";
 
 type Intervention = {
   id: string;
@@ -115,7 +116,11 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Suivi des interventions</h1>
+      <div className="flex items-center gap-4 mb-6">
+        <Image src="/logo.jpg" alt="Logo" width={150} height={150
+        } />
+        <h1 className="text-3xl font-bold">Base de données pannes</h1>
+      </div>
       <Card className="mb-6">
         <CardContent className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
           <Input type="date" name="date" value={form.date} onChange={handleChange} />
