@@ -120,3 +120,8 @@
     @apply bg-background text-foreground;
   }
 }
+body {
+  background: url('/fond.png');
+  background-repeat: repeat;
+  background-size: 1200px; /* Ajuste la taille selon tes préférences */
+}

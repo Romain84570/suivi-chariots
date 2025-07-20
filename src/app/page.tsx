@@ -144,12 +144,12 @@ export default function Home() {
           placeholder="🔍 Rechercher…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1"
+          className="flex-1 bg-white/90 border border-gray-400 shadow rounded px-3 py-2"
         />
       </div>
 
       <div className="overflow-auto">
-        <table className="min-w-full border text-sm">
+        <table className="min-w-full border text-sm bg-white/90 rounded-x1 shadow-lg">
           <thead className="bg-gray-100 font-semibold">
             <tr>
               <th className="p-2 border">Date</th>
